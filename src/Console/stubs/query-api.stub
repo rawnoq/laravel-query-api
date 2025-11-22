@@ -1,0 +1,185 @@
+<?php
+
+namespace {{ namespace }};
+
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
+use Rawnoq\QueryAPI\FilterBuilder;
+use Rawnoq\QueryAPI\IncludeBuilder;
+use Rawnoq\QueryAPI\QueryAPI;
+use Rawnoq\QueryAPI\QueryAPIConfig;
+use {{ modelClass }};
+
+/**
+ * {{ model }}QueryAPI Configuration
+ * 
+ * QueryAPI configuration for {{ model }} model
+ * 
+ * Usage Examples:
+ * 
+ * Basic usage:
+ * {{ class }}::get()
+ * {{ class }}::paginate(15)
+ * 
+ * With custom query:
+ * {{ class }}::for({{ model }}::where('status', 'active'))->get()
+ * 
+ * Using helper:
+ * query_api({{ model }}::class, {{ class }}::class)->get()
+ * 
+ * API Request Examples:
+ * GET /api/endpoint?sort=-created_at,name
+ * GET /api/endpoint?filter[status]=active&filter[name]=john
+ * GET /api/endpoint?include=posts,roles
+ * GET /api/endpoint?fields[{{ modelVariable }}s]=id,name,email
+ * GET /api/endpoint?page=2&per_page=20
+ * 
+ * Combined:
+ * GET /api/endpoint?include=posts&filter[status]=active&sort=-created_at&fields[{{ modelVariable }}s]=id,name
+ * 
+ * @method static QueryAPI for(string|\Illuminate\Database\Eloquent\Builder $model)
+ * @method static Collection get()
+ * @method static LengthAwarePaginator paginate(int $perPage = 20)
+ * @method static FilterBuilder filter()
+ * @method static IncludeBuilder include()
+ */
+class {{ class }} extends QueryAPIConfig
+{
+    /**
+     * Get the model class
+     *
+     * @return string
+     */
+    public static function model(): string
+    {
+        return {{ model }}::class;
+    }
+
+    /**
+     * Get allowed sortable fields
+     *
+     * @return array
+     */
+    public static function sorts(): array
+    {
+        return [
+            'id',
+            'name',
+            'email',
+            'status',
+            'created_at',
+            'updated_at',
+            // Add any fields you want to allow sorting by
+        ];
+    }
+
+    /**
+     * Get default sort
+     *
+     * @return string|array
+     */
+    public static function defaultSort(): string|array
+    {
+        return '-created_at';
+        // Or use multiple fields: return ['-created_at', 'name'];
+    }
+
+    /**
+     * Get allowed fields for selection
+     *
+     * @return array
+     */
+    public static function fields(): array
+    {
+        return [
+            'id',
+            'name',
+            'email',
+            'status',
+            'created_at',
+            'updated_at',
+        ];
+    }
+
+    /**
+     * Get allowed filters
+     *
+     * @return array
+     */
+    public static function filters(): array
+    {
+        return [
+            // Exact match filter
+            self::filter()->exact('id'),
+            self::filter()->exact('status'),
+            
+            // Partial match filter (LIKE %value%)
+            self::filter()->partial('name'),
+            self::filter()->partial('email'),
+            
+            // Begins with filter (LIKE value%)
+            self::filter()->beginsWith('code'),
+            
+            // Ends with filter (LIKE %value)
+            self::filter()->endsWith('suffix'),
+            
+            // Scope filter (uses model scope)
+            self::filter()->scope('active'), // Uses scopeActive()
+            self::filter()->scope('verified'), // Uses scopeVerified()
+            
+            // Operator filters (comparison operators)
+            self::filter()->operator('age'), // Dynamic operator: ?filter[age]=>18
+            self::filter()->operator('price', \Rawnoq\QueryAPI\Enums\FilterOperator::GREATER_THAN),
+            self::filter()->operator('discount', \Rawnoq\QueryAPI\Enums\FilterOperator::LESS_THAN_OR_EQUAL),
+            
+            // Trashed filter (for soft deletes)
+            self::filter()->trashed(),
+            
+            // Callback filter (custom logic)
+            self::filter()->callback('has_items', function ($query, $value) {
+                if ($value) {
+                    $query->has('items');
+                }
+            }),
+            
+            // Custom filter (using custom filter class)
+            // self::filter()->custom('custom_name', new CustomFilterClass()),
+        ];
+    }
+
+    /**
+     * Get allowed includes (relationships)
+     *
+     * @return array
+     */
+    public static function includes(): array
+    {
+        return [
+            // Basic relationship include
+            self::include()->relationship('posts'),
+            self::include()->relationship('roles'),
+            self::include()->relationship('profile'),
+            
+            // Include with alias
+            self::include()->relationship('user_profile', 'profile'),
+            
+            // Count relationships
+            self::include()->count('postsCount', 'posts'),
+            self::include()->count('commentsCount', 'comments'),
+            
+            // Check if relationship exists
+            self::include()->exists('postsExists', 'posts'),
+            
+            // Callback include (custom logic)
+            self::include()->callback('latest_post', function ($query) {
+                $query->with(['posts' => function ($q) {
+                    $q->latest()->limit(1);
+                }]);
+            }),
+            
+            // Custom include (using custom include class)
+            // self::include()->custom('custom_name', new CustomIncludeClass()),
+        ];
+    }
+}
+

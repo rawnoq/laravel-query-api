@@ -1,0 +1,75 @@
+{
+    "name": "rawnoq/laravel-query-api",
+    "description": "A powerful Laravel package that brings GraphQL-like flexibility to REST APIs with elegant query management",
+    "type": "library",
+    "keywords": [
+        "laravel",
+        "api",
+        "query",
+        "graphql",
+        "rest",
+        "query-builder",
+        "spatie",
+        "filters",
+        "includes",
+        "sorting",
+        "pagination",
+        "sparse-fieldsets"
+    ],
+    "homepage": "https://github.com/rawnoq/laravel-query-api",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Rawnoq",
+            "email": "info@rawnoq.com",
+            "homepage": "https://rawnoq.com",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "illuminate/support": "^11.0|^12.0",
+        "illuminate/http": "^11.0|^12.0",
+        "illuminate/database": "^11.0|^12.0",
+        "spatie/laravel-query-builder": "^6.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.0",
+        "orchestra/testbench": "^9.0|^10.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Rawnoq\\QueryAPI\\": "src/"
+        },
+        "files": [
+            "src/helpers.php"
+        ]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Rawnoq\\QueryAPI\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/phpunit",
+        "test-coverage": "vendor/bin/phpunit --coverage-html coverage"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Rawnoq\\QueryAPI\\QueryAPIServiceProvider"
+            ],
+            "aliases": {
+                "QueryAPI": "Rawnoq\\QueryAPI\\Facades\\QueryAPI"
+            }
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
