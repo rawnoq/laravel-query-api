@@ -18,9 +18,9 @@ class IncludeBuilder
      * 
      * @param string $name The name of the relationship to include
      * @param string|null $internalName The internal name of the relationship (if different)
-     * @return AllowedInclude
+     * @return \Illuminate\Support\Collection
      */
-    public function relationship(string $name, ?string $internalName = null): AllowedInclude
+    public function relationship(string $name, ?string $internalName = null): \Illuminate\Support\Collection
     {
         return AllowedInclude::relationship($name, $internalName);
     }

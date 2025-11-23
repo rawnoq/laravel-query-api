@@ -11,13 +11,15 @@ A powerful and elegant Laravel package that brings GraphQL-like flexibility to y
 - ✅ **Sorting** - Sort results by multiple fields with ascending/descending order
 - ✅ **Default Sorting** - Define default sorting behavior
 - ✅ **Sparse Fieldsets** - Request only the fields you need
-- ✅ **Filters** - Support for exact, partial, scope, callback, operator, and custom filters
+- ✅ **Virtual Fields** - Support for computed/accessor fields that aren't database columns
+- ✅ **Filters** - Support for exact, partial, scope, callback, operator, exclusion, and custom filters
 - ✅ **Includes (Relationships)** - Load relationships with count, exists, and custom includes
 - ✅ **Pagination** - Built-in pagination support
 - ✅ **Config Classes** - Organize query configurations in dedicated classes
 - ✅ **Fluent API** - Beautiful and intuitive API with method chaining
 - ✅ **HMVC Support** - Full compatibility with rawnoq/laravel-hmvc package
 - ✅ **Artisan Command** - Generate QueryAPI config classes easily
+- ✅ **Helper Methods** - Built-in helpers for checking requested fields and includes in Resources
 - ✅ **Security** - Whitelist-based access control for fields, filters, and relationships
 
 ## Requirements
@@ -123,6 +125,10 @@ use App\QueryAPI\UserQueryAPI;
 $users = UserQueryAPI::get();
 $users = UserQueryAPI::paginate(20);
 
+// Flexible pagination methods
+$users = UserQueryAPI::getOrPaginate();      // Default: get all, use ?paginate=1 for pagination
+$users = UserQueryAPI::paginateOrGet();      // Default: paginate, use ?get=1 for all
+
 // With custom query
 $users = UserQueryAPI::for(User::where('is_active', true))->get();
 ```
@@ -169,6 +175,12 @@ GET /api/users?filter[score]=>50            # Dynamic operator
 GET /api/users?filter[active]=1
 ```
 
+**Exclusion Filters:**
+```http
+GET /api/users?filter[exclude_status]=deleted        # WHERE status != 'deleted'
+GET /api/users?filter[exclude_id]=1,2,3              # WHERE id NOT IN (1,2,3)
+```
+
 ### Includes (Relationships)
 
 ```http
@@ -183,6 +195,20 @@ GET /api/users?include=postsExists          # Relationship exists
 
 ```http
 GET /api/users?page=2&per_page=15
+```
+
+**Flexible Pagination Methods:**
+
+```http
+# getOrPaginate() - Default: get all, use ?paginate=1 for pagination
+GET /api/users                    # Returns all users (Collection)
+GET /api/users?paginate=1        # Returns paginated (LengthAwarePaginator)
+GET /api/users?paginate=1&per_page=50  # Returns paginated with custom per_page
+
+# paginateOrGet() - Default: paginate, use ?get=1 for all
+GET /api/users                    # Returns paginated (LengthAwarePaginator)
+GET /api/users?get=1              # Returns all users (Collection)
+GET /api/users?per_page=50        # Returns paginated with custom per_page
 ```
 
 ### Complete Example
@@ -218,7 +244,11 @@ GET /api/users?include=posts&fields[users]=id,name,email&fields[posts]=id,title&
 
 // Execute query
 ->get()
-->paginate(20)
+->paginate(20)  // or paginate() to use defaultPerPage() from config
+
+// Flexible pagination methods
+->getOrPaginate()    // Default: get all, use ?paginate=1 for pagination
+->paginateOrGet()    // Default: paginate, use ?get=1 for all
 ```
 
 ## Filter Types
@@ -280,6 +310,19 @@ self::filter()->operator('salary', FilterOperator::DYNAMIC) // Allows: >3000, <1
 self::filter()->trashed()
 ```
 
+### Exclusion Filters
+
+```php
+// Exclude single value (WHERE field != value)
+self::filter()->exclude('status', 'internal_status')
+
+// Exclude multiple values (WHERE field NOT IN [...])
+self::filter()->excludeIn('id', 'internal_id')
+
+// WHERE NOT with operator
+self::filter()->whereNot('status', '!=', 'internal_status')
+```
+
 ## Include Types
 
 ### Relationship Include
@@ -313,6 +356,52 @@ self::include()->callback('latest_post', function ($query) {
 
 ```php
 self::include()->custom('comments_sum_votes', new AggregateInclude('votes', 'sum'), 'comments')
+```
+
+## Pagination Configuration
+
+You can configure pagination defaults and limits per model:
+
+```php
+class UserQueryAPI extends QueryAPIConfig
+{
+    /**
+     * Default items per page
+     */
+    public static function defaultPerPage(): int
+    {
+        return 15; // Default: 20
+    }
+
+    /**
+     * Maximum items per page
+     */
+    public static function maxPerPage(): int
+    {
+        return 100; // Default: 100
+    }
+
+    /**
+     * Minimum items per page
+     */
+    public static function minPerPage(): int
+    {
+        return 1; // Default: 1
+    }
+}
+```
+
+**Usage:**
+```php
+// Uses defaultPerPage() if per_page not in request
+$users = UserQueryAPI::paginate();
+
+// Reads per_page from request, applies min/max limits
+$users = UserQueryAPI::paginate(); // Request: ?per_page=50
+
+// Flexible methods
+$users = UserQueryAPI::getOrPaginate();  // ?paginate=1&per_page=50
+$users = UserQueryAPI::paginateOrGet();  // ?per_page=50 or ?get=1
 ```
 
 ## Advanced Usage
@@ -355,14 +444,105 @@ $users = QueryAPI::for(User::class)
     ->get();
 ```
 
+## Virtual Fields
+
+Virtual fields are computed fields or accessors that aren't actual database columns. They can be requested in API calls but won't cause SQL errors.
+
+### Defining Virtual Fields
+
+```php
+class UserQueryAPI extends QueryAPIConfig
+{
+    public static function fields(): array
+    {
+        return ['id', 'name', 'email', 'full_name']; // full_name is virtual
+    }
+
+    public static function virtualFields(): array
+    {
+        return ['full_name']; // Declare as virtual
+    }
+}
+```
+
+### Using in Resources
+
+```php
+use App\QueryAPI\UserQueryAPI;
+
+class UserResource extends JsonResource
+{
+    public function toArray($request): array
+    {
+        return [
+            'id' => $this->when(
+                UserQueryAPI::isFieldRequested('id'),
+                $this->id
+            ),
+            'name' => $this->when(
+                UserQueryAPI::isFieldRequested('name'),
+                $this->name
+            ),
+            'email' => $this->when(
+                UserQueryAPI::isFieldRequested('email'),
+                $this->email
+            ),
+            'full_name' => $this->when(
+                UserQueryAPI::isFieldRequested('full_name'),
+                $this->first_name . ' ' . $this->last_name
+            ),
+            'posts' => $this->when(
+                UserQueryAPI::isIncludeRequested('posts'),
+                fn () => PostResource::collection($this->posts)
+            ),
+        ];
+    }
+}
+```
+
+### Helper Methods
+
+The package provides helper methods for checking requested fields and includes:
+
+```php
+// Check if a field is requested
+UserQueryAPI::isFieldRequested('email', $request);
+
+// Get all requested fields
+$fields = UserQueryAPI::getRequestedFields($request);
+
+// Check if an include is requested
+UserQueryAPI::isIncludeRequested('posts', $request);
+
+// Get all requested includes
+$includes = UserQueryAPI::getRequestedIncludes($request);
+```
+
+## Performance
+
+The package includes several performance optimizations:
+
+- **Model Table Caching**: Table names are cached to avoid repeated model instantiation
+- **Efficient Field Parsing**: Optimized parsing of field formats
+- **Lazy Loading**: Relationships are only loaded when explicitly requested
+
+To clear the model table cache (useful for testing):
+
+```php
+use Rawnoq\QueryAPI\QueryAPI;
+
+QueryAPI::clearModelTableCache();
+```
+
 ## Security
 
 The package implements a whitelist-based security model:
 
 1. **Fields** - Only explicitly allowed fields can be selected
-2. **Filters** - Only explicitly allowed filters can be applied
-3. **Includes** - Only explicitly allowed relationships can be loaded
-4. **Sorts** - Only explicitly allowed fields can be sorted
+2. **Virtual Fields** - Computed fields that are validated but not queried from database
+3. **Filters** - Only explicitly allowed filters can be applied
+4. **Includes** - Only explicitly allowed relationships can be loaded
+5. **Sorts** - Only explicitly allowed fields can be sorted
 
 Any unauthorized request will be silently ignored or throw an exception based on Spatie Query Builder configuration.
 
@@ -409,6 +589,158 @@ php artisan vendor:publish --tag=query-api-stubs
 ```
 
 This will copy the stub file to `stubs/query-api.stub` in your project root where you can customize it.
+
+## Advanced Examples
+
+### Edge Cases
+
+**Handling Empty Results:**
+```php
+$users = UserQueryAPI::for(User::where('deleted', true))->get();
+if ($users->isEmpty()) {
+    return response()->json(['message' => 'No users found'], 404);
+}
+```
+
+**Custom Query with Filters:**
+```php
+$activeUsers = UserQueryAPI::for(
+    User::where('status', 'active')
+        ->where('verified', true)
+)->paginate(10);
+```
+
+**Multiple Field Formats:**
+```http
+# All these formats work:
+GET /api/users?fields=id,name
+GET /api/users?fields[users]=id,name
+GET /api/users?fields[_]=id,name
+```
+
+**Virtual Fields with Nested Resources:**
+```php
+class UserResource extends JsonResource
+{
+    public function toArray($request): array
+    {
+        return [
+            'id' => $this->when(
+                UserQueryAPI::isFieldRequested('id'),
+                $this->id
+            ),
+            'full_name' => $this->when(
+                UserQueryAPI::isFieldRequested('full_name'),
+                "{$this->first_name} {$this->last_name}"
+            ),
+            'posts' => $this->when(
+                UserQueryAPI::isIncludeRequested('posts'),
+                fn() => PostResource::collection($this->posts)
+            ),
+        ];
+    }
+}
+```
+
+**Complex Filtering:**
+```php
+// In your QueryAPIConfig
+public static function filters(): array
+{
+    return [
+        // Multiple filters on same field
+        self::filter()->exact('status'),
+        self::filter()->partial('name'),
+        
+        // Exclusion filters
+        self::filter()->exclude('exclude_status', 'status'),
+        self::filter()->excludeIn('exclude_ids', 'id'),
+        
+        // Operator filters
+        self::filter()->operator('age', FilterOperator::GREATER_THAN),
+        self::filter()->operator('price', FilterOperator::DYNAMIC), // Allows >, <, >=, <=
+        
+        // Callback with complex logic
+        self::filter()->callback('has_recent_posts', function ($query, $value) {
+            if ($value) {
+                $query->whereHas('posts', function ($q) {
+                    $q->where('created_at', '>', now()->subDays(7));
+                });
+            }
+        }),
+    ];
+}
+```
+
+## Troubleshooting
+
+### Common Issues
+
+**Issue: "Requested field(s) are not allowed"**
+```php
+// Make sure the field is in your fields() method
+public static function fields(): array
+{
+    return ['id', 'name', 'email']; // Add missing field here
+}
+```
+
+**Issue: Virtual field causing SQL errors**
+```php
+// Make sure to declare it in virtualFields()
+public static function virtualFields(): array
+{
+    return ['full_name', 'value']; // Add virtual field here
+}
+```
+
+**Issue: Includes not loading**
+```php
+// Check if the include is allowed
+public static function includes(): array
+{
+    return [
+        self::include()->relationship('posts'), // Make sure it's here
+    ];
+}
+
+// And check if it's requested in the Resource
+'posts' => $this->when(
+    UserQueryAPI::isIncludeRequested('posts'),
+    fn() => $this->posts
+)
+```
+
+**Issue: Model class not found**
+```php
+// Make sure model() method returns correct class
+public static function model(): string
+{
+    return User::class; // Use full namespace if needed: \App\Models\User::class
+}
+```
+
+**Issue: Performance with large datasets**
+```php
+// Use pagination and limit fields
+$users = UserQueryAPI::paginate(20); // Instead of get()
+
+// Request only needed fields
+GET /api/users?fields[users]=id,name&per_page=20
+```
+
+**Issue: Filter not working**
+```php
+// Check filter type matches your use case
+// For exact match:
+self::filter()->exact('status') // ?filter[status]=active
+
+// For partial match:
+self::filter()->partial('name') // ?filter[name]=john (matches "john", "johnny", etc.)
+
+// For exclusion:
+self::filter()->exclude('exclude_status', 'status') // ?filter[exclude_status]=deleted
+```
 
 ## Testing
 

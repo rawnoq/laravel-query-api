@@ -11,6 +11,19 @@ use Rawnoq\QueryAPI\Enums\FilterOperator;
  * Fluent API for building filters
  * 
  * @package Rawnoq\QueryAPI
+ * 
+ * @method AllowedFilter exact(string $name, ?string $internalName = null, bool $addRelationConstraint = true)
+ * @method AllowedFilter partial(string $name, ?string $internalName = null, bool $addRelationConstraint = true)
+ * @method AllowedFilter scope(string $name, ?string $internalName = null)
+ * @method AllowedFilter callback(string $name, callable $callback, ?string $internalName = null)
+ * @method AllowedFilter trashed(string $name = 'trashed')
+ * @method AllowedFilter beginsWith(string $name, ?string $internalName = null, bool $addRelationConstraint = true)
+ * @method AllowedFilter endsWith(string $name, ?string $internalName = null, bool $addRelationConstraint = true)
+ * @method AllowedFilter custom(string $name, $filterClass, ?string $internalName = null)
+ * @method AllowedFilter operator(string $name, FilterOperator|string $operator = FilterOperator::DYNAMIC, ?string $internalName = null, bool $addRelationConstraint = true)
+ * @method AllowedFilter exclude(string $name, ?string $internalName = null)
+ * @method AllowedFilter excludeIn(string $name, ?string $internalName = null)
+ * @method AllowedFilter whereNot(string $name, string $operator = '!=', ?string $internalName = null)
  */
 class FilterBuilder
 {
@@ -135,6 +148,56 @@ class FilterBuilder
     ): AllowedFilter
     {
         return AllowedFilter::operator($name, $operator, $internalName, $addRelationConstraint);
+    }
+
+    /**
+     * Create an exclusion filter (WHERE field != value)
+     * 
+     * @param string $name
+     * @param string|null $internalName
+     * @return AllowedFilter
+     */
+    public function exclude(string $name, ?string $internalName = null): AllowedFilter
+    {
+        $internalName = $internalName ?? $name;
+        
+        return AllowedFilter::callback($name, function ($query, $value) use ($internalName) {
+            return $query->where($internalName, '!=', $value);
+        });
+    }
+
+    /**
+     * Create an exclusion filter for multiple values (WHERE field NOT IN [...])
+     * 
+     * @param string $name
+     * @param string|null $internalName
+     * @return AllowedFilter
+     */
+    public function excludeIn(string $name, ?string $internalName = null): AllowedFilter
+    {
+        $internalName = $internalName ?? $name;
+        
+        return AllowedFilter::callback($name, function ($query, $value) use ($internalName) {
+            $values = \is_array($value) ? $value : explode(',', $value);
+            return $query->whereNotIn($internalName, $values);
+        });
+    }
+
+    /**
+     * Create a WHERE NOT filter with operator support
+     * 
+     * @param string $name
+     * @param string $operator Default '!='
+     * @param string|null $internalName
+     * @return AllowedFilter
+     */
+    public function whereNot(string $name, string $operator = '!=', ?string $internalName = null): AllowedFilter
+    {
+        $internalName = $internalName ?? $name;
+        
+        return AllowedFilter::callback($name, function ($query, $value) use ($internalName, $operator) {
+            return $query->where($internalName, $operator, $value);
+        });
     }
 }
 

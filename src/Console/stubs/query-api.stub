@@ -135,6 +135,11 @@ class {{ class }} extends QueryAPIConfig
             // Trashed filter (for soft deletes)
             self::filter()->trashed(),
             
+            // Exclusion filters
+            self::filter()->exclude('exclude_status', 'status'), // WHERE status != value
+            self::filter()->excludeIn('exclude_id', 'id'),        // WHERE id NOT IN [...]
+            self::filter()->whereNot('not_equal', '!=', 'field'), // WHERE field != value
+            
             // Callback filter (custom logic)
             self::filter()->callback('has_items', function ($query, $value) {
                 if ($value) {
@@ -180,6 +185,74 @@ class {{ class }} extends QueryAPIConfig
             // Custom include (using custom include class)
             // self::include()->custom('custom_name', new CustomIncludeClass()),
         ];
+    }
+
+    /**
+     * Get virtual fields (fields that are not database columns)
+     * 
+     * Virtual fields are fields that are computed or accessed via accessors
+     * but are not actual database columns. These fields should be validated
+     * against the fields() array but should not be passed to Spatie QueryBuilder
+     * as it will reject them.
+     * 
+     * @example
+     * // API Request: GET /api/endpoint?fields[{{ modelVariable }}s]=id,name,value
+     * // The 'value' field is virtual and will be handled separately
+     * 
+     * @return array
+     */
+    public static function virtualFields(): array
+    {
+        return [
+            // 'value',
+            // 'full_name',
+            // Add any virtual/computed fields here
+        ];
+    }
+
+    /**
+     * Get default per page value for pagination
+     * 
+     * @example API Request:
+     * GET /api/endpoint?paginate=1
+     * Result: returns 20 items per page (default)
+     * 
+     * GET /api/endpoint?paginate=1&per_page=50
+     * Result: returns 50 items per page (if within min/max limits)
+     *
+     * @return int
+     */
+    public static function defaultPerPage(): int
+    {
+        return 20;
+    }
+
+    /**
+     * Get maximum per page value for pagination
+     * 
+     * @example API Request:
+     * GET /api/endpoint?paginate=1&per_page=200
+     * Result: returns 100 items per page (capped at max)
+     *
+     * @return int
+     */
+    public static function maxPerPage(): int
+    {
+        return 100;
+    }
+
+    /**
+     * Get minimum per page value for pagination
+     * 
+     * @example API Request:
+     * GET /api/endpoint?paginate=1&per_page=0
+     * Result: returns 1 item per page (capped at min)
+     *
+     * @return int
+     */
+    public static function minPerPage(): int
+    {
+        return 1;
     }
 }
 

@@ -17,7 +17,9 @@ use Illuminate\Support\Facades\Facade;
  * @method static \Rawnoq\QueryAPI\QueryAPI defaultSort(array|string $sorts)
  * @method static \Rawnoq\QueryAPI\QueryAPI config(string $configClass)
  * @method static \Illuminate\Support\Collection get()
- * @method static \Illuminate\Pagination\LengthAwarePaginator paginate(int $perPage = 20)
+ * @method static \Illuminate\Pagination\LengthAwarePaginator paginate(?int $perPage = null)
+ * @method static \Illuminate\Support\Collection|\Illuminate\Pagination\LengthAwarePaginator getOrPaginate()
+ * @method static \Illuminate\Support\Collection|\Illuminate\Pagination\LengthAwarePaginator paginateOrGet()
  * @method static \Rawnoq\QueryAPI\QueryAPI reset()
  * 
  * @see \Rawnoq\QueryAPI\QueryAPI
