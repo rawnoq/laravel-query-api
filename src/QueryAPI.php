@@ -3,6 +3,7 @@
 namespace Rawnoq\QueryAPI;
 
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
@@ -302,6 +303,87 @@ class QueryAPI
         $query = $this->buildQuery($request);
         
         return $query->get();
+    }
+
+    /**
+     * Get the first matching record.
+     *
+     * @return mixed
+     */
+    public function first(): mixed
+    {
+        $request = request();
+        $query = $this->buildQuery($request);
+
+        return $query->first();
+    }
+
+    /**
+     * Get the first matching record or throw ModelNotFoundException.
+     *
+     * @return mixed
+     *
+     * @throws ModelNotFoundException
+     */
+    public function firstOrFail(): mixed
+    {
+        $request = request();
+        $query = $this->buildQuery($request);
+
+        $result = $query->first();
+
+        if ($result !== null) {
+            return $result;
+        }
+
+        $modelClass = $this->resolveModelClass();
+        $exception = new ModelNotFoundException();
+
+        if ($modelClass !== null) {
+            $exception->setModel($modelClass, []);
+        }
+
+        throw $exception;
+    }
+
+    /**
+     * Build the query and return the configured QueryBuilder instance.
+     *
+     * Allows the consumer to continue chaining (e.g. firstOrFail) while still
+     * benefiting from all QueryAPI features (filters, sorts, includes, ...).
+     */
+    public function handle(): QueryBuilder
+    {
+        $request = request();
+
+        return $this->buildQuery($request);
+    }
+
+    /**
+     * Determine the target model class for current query.
+     */
+    protected function resolveModelClass(): ?string
+    {
+        if ($this->configClass) {
+            try {
+                $modelClass = $this->configClass::model();
+                if (class_exists($modelClass)) {
+                    return $modelClass;
+                }
+            } catch (\Throwable $e) {
+                // ignore and fallback below
+            }
+        }
+
+        if (is_string($this->model) && class_exists($this->model)) {
+            return $this->model;
+        }
+
+        if ($this->model instanceof EloquentBuilder) {
+            return get_class($this->model->getModel());
+        }
+
+        return null;
     }
 
     /**

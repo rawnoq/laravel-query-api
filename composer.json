@@ -1,6 +1,7 @@
 {
     "name": "rawnoq/laravel-query-api",
     "description": "A powerful Laravel package that brings GraphQL-like flexibility to REST APIs with elegant query management",
+    "version": "1.2.0",
     "type": "library",
     "keywords": [
         "laravel",
