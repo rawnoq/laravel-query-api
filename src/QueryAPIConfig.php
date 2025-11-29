@@ -10,10 +10,10 @@ use Rawnoq\QueryAPI\IncludeBuilder;
 
 /**
  * QueryAPIConfig Base Class
- * 
+ *
  * Base class for QueryAPI configuration classes
  * Extend this class to define QueryAPI settings for your models
- * 
+ *
  * @package Rawnoq\QueryAPI
  */
 abstract class QueryAPIConfig
@@ -39,13 +39,14 @@ abstract class QueryAPIConfig
     }
     /**
      * Get the model class associated with this config
-     * Must be overridden in child classes
+     * Can be overridden in child classes for automatic query building
+     * Return null if using for() method with custom queries
      *
-     * @return string
+     * @return string|null
      */
-    public static function model(): string
+    public static function model(): ?string
     {
-        throw new \BadMethodCallException('The model() method must be implemented in ' . static::class);
+        return null; // Optional - only needed for automatic query building
     }
 
     /**
@@ -100,19 +101,19 @@ abstract class QueryAPIConfig
 
     /**
      * Get virtual fields (fields that are not database columns)
-     * 
+     *
      * Virtual fields are fields that are computed or accessed via accessors
      * but are not actual database columns. These fields should be validated
      * against the fields() array but should not be passed to Spatie QueryBuilder
      * as it will reject them.
-     * 
+     *
      * @example
      * // In your QueryAPIConfig:
      * public static function virtualFields(): array
      * {
      *     return ['value', 'full_name'];
      * }
-     * 
+     *
      * // In your Resource:
      * 'value' => $this->when(
      *     UserQueryAPI::isFieldRequested('value'),
@@ -128,7 +129,7 @@ abstract class QueryAPIConfig
 
     /**
      * Get default per page value for pagination
-     * 
+     *
      * @return int
      */
     public static function defaultPerPage(): int
@@ -138,7 +139,7 @@ abstract class QueryAPIConfig
 
     /**
      * Get maximum per page value for pagination
-     * 
+     *
      * @return int
      */
     public static function maxPerPage(): int
@@ -148,7 +149,7 @@ abstract class QueryAPIConfig
 
     /**
      * Get minimum per page value for pagination
-     * 
+     *
      * @return int
      */
     public static function minPerPage(): int
@@ -193,63 +194,63 @@ abstract class QueryAPIConfig
                 $perPage = static::defaultPerPage();
             }
         }
-        
+
         return query_api(static::model(), static::class)->paginate($perPage);
     }
 
     /**
      * Get all data, but allow pagination via request parameter
-     * 
+     *
      * Default behavior is to return all data (get()).
      * If 'paginate' parameter exists in request, uses pagination instead.
-     * 
+     *
      * @example
      * GET /api/settings                    // Returns all (Collection)
      * GET /api/settings?paginate=1        // Returns paginated (LengthAwarePaginator)
      * GET /api/settings?paginate=1&per_page=50  // Returns paginated with custom per_page
-     * 
+     *
      * @return Collection|LengthAwarePaginator
      */
     public static function getOrPaginate(): Collection|LengthAwarePaginator
     {
         $request = request();
-        
+
         // Check if paginate parameter exists
         if ($request->has('paginate') && $request->boolean('paginate')) {
             return static::paginate();
         }
-        
+
         return static::get();
     }
 
     /**
      * Get paginated data, but allow get all via request parameter
-     * 
+     *
      * Default behavior is to return paginated data.
      * If 'get' parameter exists in request, returns all data instead.
-     * 
+     *
      * @example
      * GET /api/settings                    // Returns paginated (LengthAwarePaginator)
      * GET /api/settings?get=1              // Returns all (Collection)
      * GET /api/settings?per_page=50        // Returns paginated with custom per_page
-     * 
+     *
      * @return Collection|LengthAwarePaginator
      */
     public static function paginateOrGet(): Collection|LengthAwarePaginator
     {
         $request = request();
-        
+
         // Check if get parameter exists
         if ($request->has('get') && $request->boolean('get')) {
             return static::get();
         }
-        
+
         return static::paginate();
     }
 
     /**
      * Get requested fields from request for this model
-     * 
+     *
      * This helper method extracts the requested fields from the request
      * query parameters, handling different formats (fields[model], fields[_], etc.)
      *
@@ -261,63 +262,71 @@ abstract class QueryAPIConfig
     {
         $request = $request ?? request();
         $requestedFields = $request->input('fields', []);
-        
-        // Get model name and table name with error handling
-        try {
-            $modelClass = static::model();
-            
-            if (!class_exists($modelClass)) {
-                return [];
-            }
-            
-            $modelName = strtolower(class_basename($modelClass));
-            $modelTableName = 'model';
-            
-            if (method_exists($modelClass, 'getTable')) {
-                try {
-                    $modelInstance = new $modelClass();
-                    $modelTableName = $modelInstance->getTable();
-                } catch (\Throwable $e) {
-                    // If model can't be instantiated, use default
-                    $modelTableName = $modelName;
-                }
-            }
-        } catch (\BadMethodCallException $e) {
-            // If model() method is not implemented, return empty array
-            return [];
-        } catch (\Throwable $e) {
-            // For any other error, return empty array
-            return [];
-        }
-        
-        $modelNamePlural = \Illuminate\Support\Str::plural($modelName);
-        $modelNameSingular = \Illuminate\Support\Str::singular($modelName);
-        
+
         $modelFields = [];
-        
+
         if (is_string($requestedFields)) {
             // Format: fields=field1,field2
             $modelFields = explode(',', $requestedFields);
         } elseif (is_array($requestedFields)) {
-            // Check all possible keys: table name, model name (singular/plural), and underscore
-            $keysToCheck = [
-                $modelTableName,    // e.g., 'settings'
-                $modelName,         // e.g., 'setting'
-                $modelNamePlural,   // e.g., 'settings'
-                $modelNameSingular, // e.g., 'setting'
-                '_',                // default format
-            ];
-            
-            foreach ($keysToCheck as $key) {
-                if (isset($requestedFields[$key])) {
-                    $modelFields = is_string($requestedFields[$key]) 
-                        ? explode(',', $requestedFields[$key]) 
-                        : $requestedFields[$key];
-                    break; // Found the fields, stop checking
+            $modelClass = static::model();
+
+            if ($modelClass && class_exists($modelClass)) {
+                // Use model-based logic if model is available
+                $modelName = strtolower(class_basename($modelClass));
+                $modelTableName = 'model';
+
+                if (method_exists($modelClass, 'getTable')) {
+                    try {
+                        $modelInstance = new $modelClass();
+                        $modelTableName = $modelInstance->getTable();
+                    } catch (\Throwable $e) {
+                        // If model can't be instantiated, use default
+                        $modelTableName = $modelName;
+                    }
+                }
+
+                $modelNamePlural = \Illuminate\Support\Str::plural($modelName);
+                $modelNameSingular = \Illuminate\Support\Str::singular($modelName);
+
+                // Check all possible keys: table name, model name (singular/plural), and underscore
+                $keysToCheck = [
+                    $modelTableName,    // e.g., 'settings'
+                    $modelName,         // e.g., 'setting'
+                    $modelNamePlural,   // e.g., 'settings'
+                    $modelNameSingular, // e.g., 'setting'
+                    '_',                // default format
+                ];
+
+                foreach ($keysToCheck as $key) {
+                    if (isset($requestedFields[$key])) {
+                        $modelFields = is_string($requestedFields[$key])
+                            ? explode(',', $requestedFields[$key])
+                            : $requestedFields[$key];
+                        break; // Found the fields, stop checking
+                    }
+                }
+            } else {
+                // Fallback for when no model is defined (using for() method)
+                // Check common keys or use the first array element
+                $keysToCheck = ['_', 'model', 'data'];
+
+                foreach ($keysToCheck as $key) {
+                    if (isset($requestedFields[$key])) {
+                        $modelFields = is_string($requestedFields[$key])
+                            ? explode(',', $requestedFields[$key])
+                            : $requestedFields[$key];
+                        break;
+                    }
+                }
+
+                // If no specific key found, use the entire array if it's not associative
+                if (empty($modelFields) && isset($requestedFields[0])) {
+                    $modelFields = $requestedFields;
                 }
             }
         }
-        
+
         return array_map('trim', $modelFields);
     }
 
@@ -330,13 +339,30 @@ abstract class QueryAPIConfig
      */
     public static function isFieldRequested(string $fieldName, ?\Illuminate\Http\Request $request = null): bool
     {
+        $request = $request ?? request();
+        if (!$request) {
+            return true; // If no request, return all fields (default behavior)
+        }
+
+        // Check if fields parameter exists in request
+        if (!$request->has('fields')) {
+            return true; // If fields parameter doesn't exist, return all fields (default behavior)
+        }
+
         $requestedFields = static::getRequestedFields($request);
-        return in_array($fieldName, $requestedFields) || empty($requestedFields);
+
+        // If fields parameter exists but parsing resulted in empty array, return false
+        if (empty($requestedFields)) {
+            return false;
+        }
+
+        // Check if field is in the requested fields list
+        return in_array($fieldName, $requestedFields);
     }
 
     /**
      * Get requested includes (relationships) from request
-     * 
+     *
      * This helper method extracts the requested includes from the request
      * query parameters, handling different formats (include=relation1,relation2)
      *
@@ -347,25 +373,25 @@ abstract class QueryAPIConfig
     {
         try {
             $request = $request ?? request();
-            
+
             if (!$request) {
                 return [];
             }
-            
+
             $requestedIncludes = $request->input('include', '');
-            
+
             if (empty($requestedIncludes)) {
                 return [];
             }
-            
+
             if (is_string($requestedIncludes)) {
                 return array_map('trim', explode(',', $requestedIncludes));
             }
-            
+
             if (is_array($requestedIncludes)) {
                 return array_map('trim', $requestedIncludes);
             }
-            
+
             return [];
         } catch (\Throwable $e) {
             // If any error occurs, return empty array
